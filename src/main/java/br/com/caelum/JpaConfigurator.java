@@ -42,7 +42,7 @@ public class JpaConfigurator {
             dataSource.setDriverClass("com.mysql.jdbc.Driver");
             dataSource.setJdbcUrl("jdbc:mysql://localhost/projeto_jpa");
             dataSource.setUser("root");
-            dataSource.setPassword("padtec");
+            dataSource.setPassword("teste");
 
             // Serão criadas agora
             dataSource.setMinPoolSize(5);
