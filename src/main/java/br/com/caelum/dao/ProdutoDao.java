@@ -32,6 +32,7 @@ public class ProdutoDao {
         return produto;
     }
 
+    // Utilizando CriteriaBuilder
     public List<Produto> getProdutos(String nome, Integer categoriaId, Integer lojaId) {
         CriteriaBuilder criteriaBuilder = em.getCriteriaBuilder();
         CriteriaQuery<Produto> query = criteriaBuilder.createQuery(Produto.class);
@@ -58,7 +59,7 @@ public class ProdutoDao {
         return typedQuery.getResultList();
     }
 
-    // Utilizando CriteriaBuilder + Conhuction (Não gostei)
+    // Utilizando CriteriaBuilder + Conjuction (Não gostei)
     public List<Produto> getProdutosConjuction(String nome, Integer categoriaId, Integer lojaId) {
         CriteriaBuilder builder = em.getCriteriaBuilder();
         CriteriaQuery<Produto> query = builder.createQuery(Produto.class);
@@ -131,7 +132,7 @@ public class ProdutoDao {
             em.merge(produto);
     }
 
-    // Gerenciado pelo Hibernate
+    // Gerenciado pelo Hibernate (Gostei mais)
     @Transactional
     public List<Produto> getProdutosHibernate(String nome, Integer categoriaId, Integer lojaId) {
         Session session = em.unwrap(Session.class);
@@ -149,5 +150,27 @@ public class ProdutoDao {
                     .add(Restrictions.like("c.id", categoriaId));
 
         return (List<Produto>) criteria.list();
+    }
+
+    public List<Produto> getProdutosEager() {
+        return em.createQuery("select distinct p from Produto p join fetch p.categorias", Produto.class).getResultList();
+    }
+
+    // Carrega todas as categorias com os produtos
+    public List<Produto> getProdutosNamedEntityGraphEager() {
+        return em.createQuery("select distinct p from Produto p", Produto.class)
+                .setHint("javax.persistence.loadgraph", em.getEntityGraph("produtoComCategoria"))
+                .getResultList();
+    }
+
+    // Utilizando CriteriaBuilder cacheando os resultados (Query cache)
+    public List<Produto> getProdutosCacheable(String nome, Integer categoriaId, Integer lojaId) {
+        CriteriaBuilder criteriaBuilder = em.getCriteriaBuilder();
+        CriteriaQuery<Produto> query = criteriaBuilder.createQuery(Produto.class);
+        query.from(Produto.class);
+
+        TypedQuery<Produto> typedQuery = em.createQuery(query);
+        typedQuery.setHint("org.hibernate.cacheable", "true");
+        return typedQuery.getResultList();
     }
 }

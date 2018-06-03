@@ -68,7 +68,9 @@ public class ProdutoController {
 		
 		//List<Produto> produtos = produtoDao.getProdutos(nome, categoriaId, lojaId);
         //List<Produto> produtos = produtoDao.getProdutosJPQL(nome, categoriaId, lojaId);
-        List<Produto> produtos = produtoDao.getProdutosHibernate(nome, categoriaId, lojaId);
+        //List<Produto> produtos = produtoDao.getProdutosHibernate(nome, categoriaId, lojaId);
+		//List<Produto> produtos = produtoDao.getProdutosNamedEntityGraphEager();
+        List<Produto> produtos = produtoDao.getProdutosCacheable(nome, categoriaId, lojaId);
 
 		model.addAttribute("produtos", produtos);
 		

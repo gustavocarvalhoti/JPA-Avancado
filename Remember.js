@@ -63,7 +63,7 @@ public class Conta {
 
 
 * ********************************************************************************
-Lazy Loading (Default) -> Traz as informações no GET
+Lazy Loading (Default) -> Traz as informações no GET (N+1)
 @OneToMany(mappedBy = "conta", fetch = FetchType.LAZY)
 private List<Movimentacao> movimentacoes;
 
@@ -127,13 +127,167 @@ public List<Produto> getProdutos(String nome, Integer categoriaId, Integer lojaI
 }
 
 * ********************************************************************************
+#EntityGraphs
+Com esse recurso podemos dizer à JPA quais relacionamentos queremos trazer nas "queries".
+#Mapeando
+@NamedEntityGraphs({
+    @NamedEntityGraph(name = "produtoComCategoria", attributeNodes = {@NamedAttributeNode("categorias")})
+})
+@Entity
+public class Produto {}
+
+#Utilizando
+public List<Produto> getProdutos() {
+    return em.createQuery("select distinct p from Produto p", Produto.class)
+            .setHint("javax.persistence.loadgraph", em.getEntityGraph("produtoComCategoria"))
+            .getResultList();
+}
+
 * ********************************************************************************
+@DynamicUpdate - Permite que na query estejam apenas os campos que foram alterados
+update Produto set nome=? where id=?
+
 * ********************************************************************************
+# Gerenciando conexões com Pool de conexão
+É errado deixar uma conexão por cliente, precisamos aprender a administrar melhor as conexões
+O caminho é deixar um conjunto de conexões abertas em algum lugar
+Esse lugar é o Pool de Connection - Pool C3P0
+#Configurando
+public DataSource pullConexao() {
+    try {
+        ComboPooledDataSource dataSource = new ComboPooledDataSource();
+        dataSource.setDriverClass("com.mysql.jdbc.Driver");
+        dataSource.setJdbcUrl("jdbc:mysql://localhost/projeto_jpa");
+        dataSource.setUser("root");
+        dataSource.setPassword("padtec");
+
+        // Serão criadas agora
+        dataSource.setMinPoolSize(5);
+        // Trabalha com as Threads simultaneas
+        dataSource.setNumHelperThreads(5);
+        // Seta o maximo de conexões
+        dataSource.setMaxPoolSize(6);
+        // Mata as conexões ociosas a cada 5 segundos
+        dataSource.setIdleConnectionTestPeriod(5);
+
+        return dataSource;
+    } catch (Exception e) {
+        e.printStackTrace();
+    }
+
+    return null;
+}
+
+#Configurando sem o Spring no persistence.xml
+Hibernate 3
+<property name="hibernate.connection.provider_class" value="org.hibernate.service.jdbc.connections.internal.C3P0ConnectionProvider">
+<property name="hibernate.c3p0.min_size" value="5" />
+<property name="hibernate.c3p0.max_size" value="20" />
+<property name="hibernate.c3p0.timeout" value="180" />
+Hibernate 4
+<property name="hibernate.connection.provider_class" value="org.hibernate.c3p0.internal.C3P0ConnectionProvider">
+<property name="hibernate.c3p0.min_size" value="5" />
+<property name="hibernate.c3p0.max_size" value="20" />
+<property name="hibernate.c3p0.timeout" value="180" />
+
+pom.xml
+<dependency>
+    <groupId>c3p0</groupId>
+    <artifactId>c3p0</artifactId>
+    <version>x.x.x</version>
+</dependency>
+<dependency>
+    <groupId>org.hibernate</groupId>
+    <artifactId>hibernate-c3p0</artifactId>
+    <version>${hibernate.version}</version>
+</dependency>
+
 * ********************************************************************************
+#Lock pessimista não é legal - Trava a entidade até terminar de usar
+Produto produto = manager.find(Produto.class, 1, LockModeType.PESSIMISTIC_READ);
+#Lock otimista (Top)
+Colocar o atributo abaixo, ai ele criar um versionamento, ai se enviar uma versão antiga ele da erro
+@Version
+private int versao;
+
 * ********************************************************************************
+*  Melhorando o desempenho com Cache de primeiro nivel, quarda os finds aqui
+O Cache de primeiro nivel é por EntityManager, cada um guarda os seus finds
+# Criando um cache global (O de segundo nivel, compartilhado por todos, tomar cuidado)
+Posso colocar por entidade
+@Entity
+@org.hibernate.annotations.Cache(usage = CacheConcurrencyStrategy.NONSTRICT_READ_WRITE)
+@DynamicUpdate
+public class Produto {}
+Ou por atributo
+@org.hibernate.annotations.Cache(usage = CacheConcurrencyStrategy.NONSTRICT_READ_WRITE)
+private List<Categoria> categorias = new ArrayList<>();
+
+READ_ONLY deve ser utilizada quando uma entidade não deve ser modificada.
+READ_WRITE deve ser utilizada quando uma entidade pode ser modificada e há grandes chances que modificações em seu estado ocorram simultaneamente. Essa estratégia é a que mais consome recursos.
+NONSTRICT_READ_WRITE deve ser utilizada quando uma entidade pode ser modificada, mas é incomum que as alterações ocorram ao mesmo tempo. Ela consome menos recursos que a estratégia READ_WRITE e é ideal quando não há problemas de dados inconsistentes serem lidos quando ocorrem alterações simultâneas.
+TRANSACTIONAL deve ser utilizada em ambientes JTA, como por exemplo em servidores de aplicação. Como utilizamos Tomcat com Spring (sem JTA) essa opção não funcionará.
+
 * ********************************************************************************
+# Query cache (Bom para filtros de tela) - ehcache.xml
+public List<Produto> getProdutosCacheable(String nome, Integer categoriaId, Integer lojaId) {
+    CriteriaBuilder criteriaBuilder = em.getCriteriaBuilder();
+    CriteriaQuery<Produto> query = criteriaBuilder.createQuery(Produto.class);
+    query.from(Produto.class);
+
+    TypedQuery<Produto> typedQuery = em.createQuery(query);
+    typedQuery.setHint("org.hibernate.cacheable", "true");
+    return typedQuery.getResultList();
+}
+# Setando o parametro
+props.setProperty("hibernate.cache.use_query_cache", "true");
+
 * ********************************************************************************
+# ehcache.xml - Valida o numero de querys em cache
+<?xml version="1.0" encoding="UTF-8"?>
+<ehcache>
+    <diskStore path="java.io.tmpdir"/>
+    <defaultCache
+            maxElementsInMemory="2"
+            eternal="true"
+            overflowToDisk="false"/>
+</ehcache>
+
+Da para colocar por entidade tb
+<cache name="br.com.caelum.model.Produto"
+    maxElementsInMemory="300"
+    eternal="true"
+    overflowToDisk="false"
+/>
+http://www.ehcache.org/documentation/2.8/configuration/configuration.html
+
 * ********************************************************************************
+# Caçando seus gargalos com o Hibernate Statistics
+// Statistics
+props.setProperty("hibernate.generate_statistics", "true");
+@Bean
+public Statistics statistics(EntityManagerFactory emf) {
+    SessionFactory factory = emf.unwrap(SessionFactory.class);
+    return factory.getStatistics();
+}
+# HTML
+<table class="table table-striped">
+    <thead>
+        <tr>
+            <th>Hit - Tinha no cache</th>
+            <th>Miss - Buscou no banco</th>
+            <th>Conexões</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td>${statistics.queryCacheHitCount}</td>
+            <td>${statistics.queryCacheMissCount}</td>
+            <td>${statistics.connectCount}</td>
+        </tr>
+    </tbody>
+</table>
+
 * ********************************************************************************
 * ********************************************************************************
 * ********************************************************************************

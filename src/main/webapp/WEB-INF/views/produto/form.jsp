@@ -99,7 +99,8 @@
 						<input type="submit" class="btn btn-success" value="Cadastrar">
 					</div>
 				</c:if>
-				
+
+                <input type="hidden" name="versao" value="${produto.versao}">
  			</form>
 		</div>
 	</div>

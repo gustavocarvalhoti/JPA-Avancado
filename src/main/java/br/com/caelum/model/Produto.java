@@ -1,6 +1,8 @@
 
 package br.com.caelum.model;
 
+import org.hibernate.annotations.CacheConcurrencyStrategy;
+import org.hibernate.annotations.DynamicUpdate;
 import org.hibernate.validator.constraints.NotEmpty;
 
 import javax.persistence.*;
@@ -9,12 +11,21 @@ import javax.validation.constraints.Min;
 import java.util.ArrayList;
 import java.util.List;
 
+@NamedEntityGraphs({
+        @NamedEntityGraph(name = "produtoComCategoria", attributeNodes = {@NamedAttributeNode("categorias")})
+})
 @Entity
+@org.hibernate.annotations.Cache(usage = CacheConcurrencyStrategy.NONSTRICT_READ_WRITE)
+@DynamicUpdate
 public class Produto {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer id;
+
+    // Versionado pelo JPA
+    @Version
+    private int versao;
 
     @NotEmpty
     private String nome;
@@ -31,10 +42,12 @@ public class Produto {
 
     @ManyToMany
     //@JoinTable(name = "CATEGORIA_PRODUTO_REL")
+    @org.hibernate.annotations.Cache(usage = CacheConcurrencyStrategy.NONSTRICT_READ_WRITE)
     private List<Categoria> categorias = new ArrayList<>();
 
     @Valid
     @ManyToOne
+    @org.hibernate.annotations.Cache(usage = CacheConcurrencyStrategy.NONSTRICT_READ_WRITE)
     private Loja loja;
 
     public String getDescricao() {
@@ -97,5 +110,13 @@ public class Produto {
 
     public void setCategorias(List<Categoria> categorias) {
         this.categorias = categorias;
+    }
+
+    public int getVersao() {
+        return versao;
+    }
+
+    public void setVersao(int versao) {
+        this.versao = versao;
     }
 }
